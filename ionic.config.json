@@ -1,0 +1,7 @@
+{
+  "name": "BestB4",
+  "integrations": {
+    "capacitor": {}
+  },
+  "type": "vue-vite"
+}
