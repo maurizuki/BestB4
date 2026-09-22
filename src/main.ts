@@ -1,6 +1,7 @@
 import { createApp } from 'vue'
 import App from './App.vue'
 import router from './router';
+import { loadItems } from './composables/useItems';
 
 import { IonicVue } from '@ionic/vue';
 
@@ -38,6 +39,8 @@ const app = createApp(App)
   .use(IonicVue)
   .use(router);
 
-router.isReady().then(() => {
+/* ItemEditPage looks its item up synchronously at setup, so the list has to be hydrated
+   before anything mounts. */
+Promise.all([router.isReady(), loadItems()]).then(() => {
   app.mount('#app');
 });
