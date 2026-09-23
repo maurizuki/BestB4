@@ -32,7 +32,7 @@
             min="0"
             label="Duration (days)"
             label-placement="stacked"
-            placeholder="0"
+            placeholder="How long does it last?"
             @keyup.enter="confirm"
           />
         </ion-item>

@@ -1,5 +1,13 @@
 import { flushPromises, mount } from '@vue/test-utils'
-import { IonChip, IonicVue, IonIcon, IonItem, IonItemOption, IonItemOptions } from '@ionic/vue'
+import {
+  IonChip,
+  IonicVue,
+  IonIcon,
+  IonItem,
+  IonItemOption,
+  IonItemOptions,
+  IonPopover
+} from '@ionic/vue'
 import { createRouter, createWebHistory } from '@ionic/vue-router'
 import { notifications, notificationsOff } from 'ionicons/icons'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
@@ -118,6 +126,40 @@ describe('HomePage.vue', () => {
     expect(chips).toHaveLength(1)
     expect(chips[0].text()).toBe('3')
     expect(close).toHaveBeenCalledOnce()
+  })
+
+  test('has a menu button that opens the menu', async () => {
+    const wrapper = await mountHomePage()
+
+    const button = wrapper.find('#home-menu')
+    expect(button.exists()).toBe(true)
+    expect(wrapper.findComponent(IonPopover).props('trigger')).toBe('home-menu')
+  })
+
+  test('offers Settings in the menu, and choosing it opens the settings page', async () => {
+    await router.push('/home')
+    await router.isReady()
+    /* Attached, unlike the other tests: the popover finds its trigger by id in the document
+       and only mounts its content once it is actually presented. */
+    const wrapper = mount(HomePage, {
+      global: { plugins: [IonicVue, router] },
+      attachTo: document.body
+    })
+    const push = vi.spyOn(router, 'push')
+
+    await wrapper.find('#home-menu').trigger('click')
+    await vi.waitFor(() => {
+      expect(wrapper.findComponent(IonPopover).text()).toContain('Settings')
+    })
+    const settingsEntry = wrapper
+      .findComponent(IonPopover)
+      .findAllComponents(IonItem)
+      .find((item) => item.text() === 'Settings')
+    await settingsEntry?.trigger('click')
+
+    expect(push).toHaveBeenCalledWith('/settings')
+    push.mockRestore()
+    wrapper.unmount()
   })
 
   test('schedules a reminder when the start option is tapped', async () => {

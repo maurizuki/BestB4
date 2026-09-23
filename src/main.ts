@@ -2,6 +2,7 @@ import { createApp } from 'vue'
 import App from './App.vue'
 import router from './router';
 import { loadItems } from './composables/useItems';
+import { loadTheme } from './composables/useTheme';
 
 import { IonicVue } from '@ionic/vue';
 
@@ -29,8 +30,9 @@ import '@ionic/vue/css/display.css';
  */
 
 /* @import '@ionic/vue/css/palettes/dark.always.css'; */
-/* @import '@ionic/vue/css/palettes/dark.class.css'; */
-import '@ionic/vue/css/palettes/dark.system.css';
+/* The class palette, not the system one: dark applies only while useTheme puts
+   .ion-palette-dark on <html>, which is what lets Light and Dark override the OS. */
+import '@ionic/vue/css/palettes/dark.class.css';
 
 /* Theme variables */
 import './theme/variables.css';
@@ -40,7 +42,7 @@ const app = createApp(App)
   .use(router);
 
 /* ItemEditPage looks its item up synchronously at setup, so the list has to be hydrated
-   before anything mounts. */
-Promise.all([router.isReady(), loadItems()]).then(() => {
+   before anything mounts; the theme too, so the first frame is not in the wrong scheme. */
+Promise.all([router.isReady(), loadItems(), loadTheme()]).then(() => {
   app.mount('#app');
 });

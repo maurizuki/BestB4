@@ -2,6 +2,7 @@ import { createRouter, createWebHistory } from '@ionic/vue-router';
 import { RouteRecordRaw } from 'vue-router';
 import HomePage from '../views/HomePage.vue'
 import ItemEditPage from '../views/ItemEditPage.vue'
+import SettingsPage from '../views/SettingsPage.vue'
 
 const routes: Array<RouteRecordRaw> = [
   {
@@ -22,6 +23,11 @@ const routes: Array<RouteRecordRaw> = [
     path: '/item/:id',
     name: 'EditItem',
     component: ItemEditPage
+  },
+  {
+    path: '/settings',
+    name: 'Settings',
+    component: SettingsPage
   }
 ]
 

@@ -3,8 +3,24 @@
     <ion-header :translucent="true">
       <ion-toolbar>
         <ion-title>BestB4</ion-title>
+        <ion-buttons slot="end">
+          <ion-button id="home-menu" aria-label="Menu">
+            <ion-icon slot="icon-only" :icon="ellipsisVertical" />
+          </ion-button>
+        </ion-buttons>
       </ion-toolbar>
     </ion-header>
+
+    <ion-popover trigger="home-menu" :dismiss-on-select="true">
+      <ion-content>
+        <ion-list lines="none">
+          <ion-item button :detail="false" @click="openSettings">
+            <ion-icon slot="start" :icon="settings" />
+            <ion-label>Settings</ion-label>
+          </ion-item>
+        </ion-list>
+      </ion-content>
+    </ion-popover>
 
     <ion-content :fullscreen="true">
       <ion-header collapse="condense">
@@ -55,6 +71,8 @@
 
 <script setup lang="ts">
 import {
+  IonButton,
+  IonButtons,
   IonChip,
   IonContent,
   IonFab,
@@ -68,10 +86,18 @@ import {
   IonLabel,
   IonList,
   IonPage,
+  IonPopover,
   IonTitle,
   IonToolbar
 } from '@ionic/vue';
-import { add, notifications, notificationsOff, trash } from 'ionicons/icons';
+import {
+  add,
+  ellipsisVertical,
+  notifications,
+  notificationsOff,
+  settings,
+  trash
+} from 'ionicons/icons';
 import { useRouter } from 'vue-router';
 import { useItems } from '@/composables/useItems';
 import { expiryChip } from '@/utils/expiry';
@@ -82,6 +108,8 @@ const { sortedItems, toggleExpiry, removeItem } = useItems();
 const newItem = () => router.push('/item/new');
 
 const editItem = (id: number) => router.push(`/item/${id}`);
+
+const openSettings = () => router.push('/settings');
 
 /* Neither tapping an option nor a start-side full swipe closes the row, so close it here.
    close() is synchronous, so it always runs before the list re-sorts and moves this row. */
