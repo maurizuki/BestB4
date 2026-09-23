@@ -6,6 +6,7 @@ import {
   scheduleExpiryNotification,
   syncNotifications
 } from '@/utils/notifications';
+import { reportError } from '@/utils/toast';
 
 export interface Item {
   /* Numeric because it doubles as the notification id, which Android requires to be a
@@ -32,7 +33,7 @@ const createId = (): number => ++nextId;
    for the write - but a write that fails is reported rather than swallowed. */
 const save = (): void => {
   void Preferences.set({ key: STORAGE_KEY, value: JSON.stringify(items) }).catch(
-    (error: unknown) => console.error('The item list could not be saved.', error)
+    (error: unknown) => reportError('Your changes could not be saved.', error)
   );
 };
 
@@ -53,7 +54,7 @@ export const loadItems = async (): Promise<void> => {
     }
   } catch (error) {
     /* Unreadable storage costs the user their list; it must not also cost them the app. */
-    console.error('The item list could not be loaded.', error);
+    reportError('Your saved items could not be loaded.', error);
   }
 
   syncNotifications(items);

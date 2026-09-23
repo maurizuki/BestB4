@@ -2,13 +2,20 @@ import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { flushPromises } from '@vue/test-utils'
 import { Preferences } from '@capacitor/preferences'
 import { syncNotifications } from '@/utils/notifications'
+import { reportError } from '@/utils/toast'
 
 /* jsdom has no window.Notification, so the real plugin would reject on every mutation.
    Preferences is deliberately NOT mocked: its web implementation wraps localStorage, which
    jsdom provides, so the JSON round-trip this feature is made of is genuinely exercised. */
 vi.mock('@/utils/notifications')
 
+/* Mocked modules survive vi.resetModules(), so these handles stay valid across restarts. */
+vi.mock('@/utils/toast')
+
 const synced = vi.mocked(syncNotifications)
+const reported = vi.mocked(reportError)
+
+const LOAD_FAILED = 'Your saved items could not be loaded.'
 
 const STORAGE_KEY = 'items'
 
@@ -148,26 +155,48 @@ describe('item persistence', () => {
     ])
   })
 
-  test('starts empty when the saved list cannot be parsed', async () => {
-    const reportError = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+  test('starts empty and tells the user when the saved list cannot be parsed', async () => {
     await Preferences.set({ key: STORAGE_KEY, value: 'not json' })
 
     const { items } = await restart()
 
     expect(items).toHaveLength(0)
-    expect(reportError).toHaveBeenCalled()
-    reportError.mockRestore()
+    expect(reported).toHaveBeenCalledWith(LOAD_FAILED, expect.any(SyntaxError))
   })
 
-  test('starts empty when the saved list is not an array', async () => {
-    const reportError = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+  test('starts empty and tells the user when the saved list is not an array', async () => {
     await Preferences.set({ key: STORAGE_KEY, value: JSON.stringify({ description: 'Milk' }) })
 
     const { items } = await restart()
 
     expect(items).toHaveLength(0)
-    expect(reportError).toHaveBeenCalled()
-    reportError.mockRestore()
+    expect(reported).toHaveBeenCalledWith(LOAD_FAILED, expect.any(Error))
+  })
+
+  test('tells the user when the list cannot be saved, and keeps it in memory', async () => {
+    const { addItem, items } = await restart()
+    /* Preferences is a plugin proxy with no real method to spy on, so the failure is made
+       where it would really happen: the storage behind it running out of room. */
+    const failure = new DOMException('The quota has been exceeded.', 'QuotaExceededError')
+    const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementationOnce(() => {
+      throw failure
+    })
+
+    addItem('Milk', 7)
+    await settle()
+
+    expect(reported).toHaveBeenCalledWith('Your changes could not be saved.', failure)
+    expect(items.map((item) => item.description)).toEqual(['Milk'])
+    setItem.mockRestore()
+  })
+
+  test('says nothing when loading and saving succeed', async () => {
+    const { addItem } = await restart()
+
+    addItem('Milk', 7)
+    await settle()
+
+    expect(reported).not.toHaveBeenCalled()
   })
 
   test('re-applies the reminders of the restored list', async () => {

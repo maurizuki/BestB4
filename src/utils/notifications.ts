@@ -1,18 +1,21 @@
 import { LocalNotifications, type LocalNotificationSchema } from '@capacitor/local-notifications';
 import type { Item } from '@/composables/useItems';
 import { reminderTime } from '@/utils/expiry';
+import { reportError } from '@/utils/toast';
 
 const REMINDER_BODY = 'Best before today.';
 
-/* Reminders are a convenience on top of the list, and the plugin rejects in the two
-   situations we do not control - a browser with no Notification API, and a user who denied
-   permission - so a failure is reported but never propagated: it must not bubble into the
-   UI and undo the expiration date the user just set. */
+const NOT_ALLOWED = 'Notifications are not allowed, so no reminder will be shown.';
+
+/* The plugin rejects when the browser has no Notification API, or on Android when
+   notifications are disabled. A denied permission elsewhere does not reject - that is
+   checked separately. Either way the failure is reported but never propagated: it must not
+   bubble into the UI and undo the expiration date the user just set. */
 const attempt = async (action: () => Promise<unknown>): Promise<void> => {
   try {
     await action();
   } catch (error) {
-    console.error('The expiry reminder could not be updated.', error);
+    reportError('The reminder could not be updated.', error);
   }
 };
 
@@ -23,10 +26,16 @@ const toNotification = (item: Item): LocalNotificationSchema | null => {
     return null;
   }
 
-  /* No allowWhileIdle: a morning reminder tolerates a Doze delay of minutes, and asking for
-     exact alarms means Android deletes every scheduled notification if the user later
-     revokes that permission. */
-  return { id: item.id, title: item.description, body: REMINDER_BODY, schedule: { at } };
+  /* Not exact: a morning reminder tolerates a Doze delay of minutes, while an exact alarm can
+     send the user to Android's "Alarms & reminders" settings, and revoking that permission
+     deletes every scheduled notification. */
+  return {
+    id: item.id,
+    title: item.description,
+    body: REMINDER_BODY,
+    schedule: { at },
+    isExactNotification: false
+  };
 };
 
 export const scheduleExpiryNotification = (item: Item): void => {
@@ -35,7 +44,16 @@ export const scheduleExpiryNotification = (item: Item): void => {
     return;
   }
 
-  void attempt(() => LocalNotifications.schedule({ notifications: [notification] }));
+  void attempt(async () => {
+    /* Asked here rather than left to schedule(): only native schedule() prompts, and iOS and
+       web accept a schedule() under a denied permission without complaint. */
+    const { display } = await LocalNotifications.requestPermissions();
+    if (display !== 'granted') {
+      reportError(NOT_ALLOWED);
+      return;
+    }
+    await LocalNotifications.schedule({ notifications: [notification] });
+  });
 };
 
 export const cancelExpiryNotification = (item: Item): void => {
@@ -43,19 +61,25 @@ export const cancelExpiryNotification = (item: Item): void => {
 };
 
 /* Pending notifications do not survive everything the list survives: the web implementation
-   loses them on every reload, a restored backup arrives with none, and iOS silently drops
-   the oldest past 64. The stored list is the source of truth, so it is re-applied at
-   startup. Scheduling an id that is already pending replaces it, so this is idempotent. */
+   loses them on every reload, a restored backup arrives with none, and iOS silently drops the
+   oldest past 64. The stored list is the source of truth, so it is re-applied at startup.
+   Scheduling an id that is already pending replaces it, so this is idempotent. */
 export const syncNotifications = (items: readonly Item[]): void => {
   const notifications = items
     .map(toNotification)
     .filter((notification): notification is LocalNotificationSchema => notification !== null);
 
-  /* Returning early also keeps a first run, where nothing is dated yet, from raising the
-     permission prompt that schedule() triggers - that prompt belongs to the first bell tap. */
   if (notifications.length === 0) {
     return;
   }
 
-  void attempt(() => LocalNotifications.schedule({ notifications }));
+  void attempt(async () => {
+    /* Only checked, never asked: a launch is not a user action that justifies a prompt, and
+       a toast on every launch would be noise. */
+    const { display } = await LocalNotifications.checkPermissions();
+    if (display !== 'granted') {
+      return;
+    }
+    await LocalNotifications.schedule({ notifications });
+  });
 };

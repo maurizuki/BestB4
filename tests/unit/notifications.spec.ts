@@ -7,18 +7,29 @@ import {
   syncNotifications
 } from '@/utils/notifications'
 import type { Item } from '@/composables/useItems'
+import { reportError } from '@/utils/toast'
 
 /* jsdom has no window.Notification, so the plugin's own web implementation rejects every
-   call. Mocking it is also the only way to observe what would have been scheduled. */
+   call. Mocking it is also the only way to observe what would have been scheduled.
+   Implementations are passed to vi.fn() so clearAllMocks() keeps them. */
 vi.mock('@capacitor/local-notifications', () => ({
   LocalNotifications: {
+    requestPermissions: vi.fn(async () => ({ display: 'granted' as const })),
+    checkPermissions: vi.fn(async () => ({ display: 'granted' as const })),
     schedule: vi.fn(async () => ({ notifications: [] })),
     cancel: vi.fn(async () => undefined)
   }
 }))
 
+vi.mock('@/utils/toast')
+
+const requestPermissions = vi.mocked(LocalNotifications.requestPermissions)
+const checkPermissions = vi.mocked(LocalNotifications.checkPermissions)
 const schedule = vi.mocked(LocalNotifications.schedule)
 const cancel = vi.mocked(LocalNotifications.cancel)
+const reported = vi.mocked(reportError)
+
+const NOT_ALLOWED = 'Notifications are not allowed, so no reminder will be shown.'
 
 /* Only Date is faked, so setImmediate stays real and flushPromises() actually resolves. */
 const settle = () => flushPromises()
@@ -53,7 +64,8 @@ describe('notifications', () => {
           id: 42,
           title: 'Milk',
           body: 'Best before today.',
-          schedule: { at: new Date(2026, 8, 29, 9, 0, 0, 0) }
+          schedule: { at: new Date(2026, 8, 29, 9, 0, 0, 0) },
+          isExactNotification: false
         }
       ]
     })
@@ -118,15 +130,54 @@ describe('notifications', () => {
     expect(cancel).toHaveBeenCalledWith({ notifications: [{ id: 42 }] })
   })
 
-  test('reports a failing plugin without throwing', async () => {
-    const reportError = vi.spyOn(console, 'error').mockImplementation(() => undefined)
-    schedule.mockRejectedValueOnce(new Error('Notifications not supported in this browser.'))
+  test('reports a failing plugin to the user without throwing', async () => {
+    const failure = new Error('Notifications not supported in this browser.')
+    schedule.mockRejectedValueOnce(failure)
 
     expect(() => scheduleExpiryNotification(anItem())).not.toThrow()
     await settle()
 
-    expect(reportError).toHaveBeenCalled()
-    reportError.mockRestore()
+    expect(reported).toHaveBeenCalledWith('The reminder could not be updated.', failure)
+  })
+
+  describe('permission', () => {
+    test('asks for it before scheduling', async () => {
+      scheduleExpiryNotification(anItem())
+      await settle()
+
+      expect(requestPermissions).toHaveBeenCalledOnce()
+      expect(requestPermissions.mock.invocationCallOrder[0]).toBeLessThan(
+        schedule.mock.invocationCallOrder[0]
+      )
+    })
+
+    test('schedules nothing and tells the user when it is denied', async () => {
+      requestPermissions.mockResolvedValueOnce({ display: 'denied' })
+
+      scheduleExpiryNotification(anItem())
+      await settle()
+
+      expect(schedule).not.toHaveBeenCalled()
+      expect(reported).toHaveBeenCalledWith(NOT_ALLOWED)
+    })
+
+    /* On web, dismissing the browser prompt leaves the permission undecided, not denied. */
+    test('treats a dismissed prompt like a denial', async () => {
+      requestPermissions.mockResolvedValueOnce({ display: 'prompt' })
+
+      scheduleExpiryNotification(anItem())
+      await settle()
+
+      expect(schedule).not.toHaveBeenCalled()
+      expect(reported).toHaveBeenCalledWith(NOT_ALLOWED)
+    })
+
+    test('is not asked for when there is nothing to schedule', async () => {
+      scheduleExpiryNotification(anItem({ expiresOn: null }))
+      await settle()
+
+      expect(requestPermissions).not.toHaveBeenCalled()
+    })
   })
 
   describe('syncNotifications', () => {
@@ -165,7 +216,27 @@ describe('notifications', () => {
       syncNotifications([anItem({ id: 1, expiresOn: null }), anItem({ id: 2, expiresOn: null })])
       await settle()
 
+      expect(checkPermissions).not.toHaveBeenCalled()
       expect(schedule).not.toHaveBeenCalled()
+    })
+
+    /* A launch is not a user action, so it must never raise the permission prompt. */
+    test('checks the permission without asking for it', async () => {
+      syncNotifications([anItem()])
+      await settle()
+
+      expect(checkPermissions).toHaveBeenCalledOnce()
+      expect(requestPermissions).not.toHaveBeenCalled()
+    })
+
+    test('skips silently when the permission is not granted', async () => {
+      checkPermissions.mockResolvedValueOnce({ display: 'denied' })
+
+      syncNotifications([anItem()])
+      await settle()
+
+      expect(schedule).not.toHaveBeenCalled()
+      expect(reported).not.toHaveBeenCalled()
     })
   })
 })
