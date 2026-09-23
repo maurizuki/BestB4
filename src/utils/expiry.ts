@@ -21,14 +21,12 @@ export const addDays = (isoDate: string, days: number): string => {
   return toIsoDate(date);
 };
 
-/* Reminders land in the morning of the expiration day rather than at its midnight. */
-const REMINDER_HOUR = 9;
-
-/* The moment to remind about a date, or null once that moment has gone by. Fusing the two
-   means a caller cannot build the date and forget to check it. */
-export const reminderTime = (isoDate: string): Date | null => {
+/* The moment to remind about a date at an 'HH:mm' time of that day, or null once that moment
+   has gone by. Fusing the two means a caller cannot build the date and forget to check it. */
+export const reminderMoment = (isoDate: string, time: string): Date | null => {
+  const [hours, minutes] = time.split(':').map(Number);
   const at = parseIsoDate(isoDate);
-  at.setHours(REMINDER_HOUR);
+  at.setHours(hours, minutes);
   return at.getTime() > Date.now() ? at : null;
 };
 

@@ -19,7 +19,26 @@
             <ion-radio :value="option.value">{{ option.label }}</ion-radio>
           </ion-item>
         </ion-radio-group>
+
+        <ion-list-header>
+          <ion-label>Reminders</ion-label>
+        </ion-list-header>
+        <ion-item>
+          <ion-label>Time</ion-label>
+          <ion-datetime-button slot="end" datetime="reminder-time" />
+        </ion-item>
       </ion-list>
+
+      <!-- Kept mounted: the button looks the datetime up by id once, when it loads. -->
+      <ion-popover :keep-contents-mounted="true">
+        <ion-datetime
+          id="reminder-time"
+          presentation="time"
+          :minute-values="REMINDER_MINUTES"
+          :value="reminderTime"
+          @ionChange="onTimeChange"
+        />
+      </ion-popover>
     </ion-content>
   </ion-page>
 </template>
@@ -29,18 +48,28 @@ import {
   IonBackButton,
   IonButtons,
   IonContent,
+  IonDatetime,
+  IonDatetimeButton,
   IonHeader,
   IonItem,
   IonLabel,
   IonList,
   IonListHeader,
   IonPage,
+  IonPopover,
   IonRadio,
   IonRadioGroup,
   IonTitle,
   IonToolbar,
+  type DatetimeCustomEvent,
   type RadioGroupCustomEvent
 } from '@ionic/vue';
+import { useItems } from '@/composables/useItems';
+import {
+  isReminderTime,
+  REMINDER_MINUTES,
+  useReminderTime
+} from '@/composables/useReminderTime';
 import { type Theme, useTheme } from '@/composables/useTheme';
 
 const THEME_OPTIONS: { value: Theme; label: string }[] = [
@@ -50,7 +79,22 @@ const THEME_OPTIONS: { value: Theme; label: string }[] = [
 ];
 
 const { theme, setTheme } = useTheme();
+const { reminderTime, setReminderTime } = useReminderTime();
+const { rescheduleReminders } = useItems();
 
 /* No Save step: a choice is applied the moment it is made. */
 const onThemeChange = (event: RadioGroupCustomEvent<Theme>) => setTheme(event.detail.value);
+
+/* Seeded with HH:mm, ion-datetime emits HH:mm; anything else - a clear, or a full ISO string
+   should the seed ever be missing - is normalised or ignored rather than stored. */
+const onTimeChange = (event: DatetimeCustomEvent) => {
+  const value = event.detail.value;
+  const time = typeof value === 'string' ? /\d{2}:\d{2}/.exec(value)?.[0] : undefined;
+  if (!isReminderTime(time)) {
+    return;
+  }
+  setReminderTime(time);
+  /* After the time is set: rescheduling reads it. */
+  rescheduleReminders();
+};
 </script>

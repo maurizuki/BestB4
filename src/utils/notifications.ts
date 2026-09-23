@@ -1,7 +1,10 @@
 import { LocalNotifications, type LocalNotificationSchema } from '@capacitor/local-notifications';
 import type { Item } from '@/composables/useItems';
-import { reminderTime } from '@/utils/expiry';
+import { useReminderTime } from '@/composables/useReminderTime';
+import { reminderMoment } from '@/utils/expiry';
 import { reportError } from '@/utils/toast';
+
+const { reminderTime } = useReminderTime();
 
 const REMINDER_BODY = 'Best before today.';
 
@@ -19,9 +22,10 @@ const attempt = async (action: () => Promise<unknown>): Promise<void> => {
   }
 };
 
-/* Null whenever there is nothing to schedule: no date set, or a 09:00 already gone by. */
+/* Null whenever there is nothing to schedule: no date set, or the reminder time on that day
+   already gone by. The time is read on every call, so a change applies to the next one. */
 const toNotification = (item: Item): LocalNotificationSchema | null => {
-  const at = item.expiresOn === null ? null : reminderTime(item.expiresOn);
+  const at = item.expiresOn === null ? null : reminderMoment(item.expiresOn, reminderTime.value);
   if (at === null) {
     return null;
   }
@@ -37,6 +41,10 @@ const toNotification = (item: Item): LocalNotificationSchema | null => {
     isExactNotification: false
   };
 };
+
+const isNotification = (
+  notification: LocalNotificationSchema | null
+): notification is LocalNotificationSchema => notification !== null;
 
 export const scheduleExpiryNotification = (item: Item): void => {
   const notification = toNotification(item);
@@ -65,9 +73,7 @@ export const cancelExpiryNotification = (item: Item): void => {
    oldest past 64. The stored list is the source of truth, so it is re-applied at startup.
    Scheduling an id that is already pending replaces it, so this is idempotent. */
 export const syncNotifications = (items: readonly Item[]): void => {
-  const notifications = items
-    .map(toNotification)
-    .filter((notification): notification is LocalNotificationSchema => notification !== null);
+  const notifications = items.map(toNotification).filter(isNotification);
 
   if (notifications.length === 0) {
     return;
@@ -81,5 +87,31 @@ export const syncNotifications = (items: readonly Item[]): void => {
       return;
     }
     await LocalNotifications.schedule({ notifications });
+  });
+};
+
+/* After a reminder time change, every dated item either moves to the new time or, if that
+   moment has already passed today, loses its now-stale reminder. Only checked, never asked:
+   changing the time is not a request for reminders, and moving the wheel should not nag. */
+export const rescheduleReminders = (items: readonly Item[]): void => {
+  const dated = items.filter((item) => item.expiresOn !== null);
+  if (dated.length === 0) {
+    return;
+  }
+
+  void attempt(async () => {
+    const { display } = await LocalNotifications.checkPermissions();
+    if (display !== 'granted') {
+      return;
+    }
+
+    const due = dated.map(toNotification).filter(isNotification);
+    const stale = dated.filter((item) => toNotification(item) === null);
+    if (stale.length > 0) {
+      await LocalNotifications.cancel({ notifications: stale.map(({ id }) => ({ id })) });
+    }
+    if (due.length > 0) {
+      await LocalNotifications.schedule({ notifications: due });
+    }
   });
 };

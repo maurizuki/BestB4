@@ -3,6 +3,7 @@ import { Preferences } from '@capacitor/preferences';
 import { addDays, today } from '@/utils/expiry';
 import {
   cancelExpiryNotification,
+  rescheduleReminders as rescheduleRemindersFor,
   scheduleExpiryNotification,
   syncNotifications
 } from '@/utils/notifications';
@@ -134,6 +135,9 @@ export function useItems() {
     }
   };
 
+  /* For when the reminder time changes: every pending reminder has to follow it. */
+  const rescheduleReminders = (): void => rescheduleRemindersFor(items);
+
   return {
     items: readonly(items),
     sortedItems,
@@ -141,6 +145,7 @@ export function useItems() {
     getItem,
     updateItem,
     toggleExpiry,
-    removeItem
+    removeItem,
+    rescheduleReminders
   };
 }

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
-import { addDays, daysUntil, expiryChip, reminderTime, toIsoDate, today } from '@/utils/expiry'
+import { addDays, daysUntil, expiryChip, reminderMoment, toIsoDate, today } from '@/utils/expiry'
 
 describe('expiry', () => {
   beforeEach(() => {
@@ -28,16 +28,30 @@ describe('expiry', () => {
     expect(daysUntil('2026-09-20')).toBe(-2)
   })
 
-  test('puts the reminder at 09:00 on the expiration day', () => {
-    expect(reminderTime('2026-09-23')).toEqual(new Date(2026, 8, 23, 9, 0, 0, 0))
+  test('puts the reminder at the given time on the expiration day', () => {
+    expect(reminderMoment('2026-09-23', '09:00')).toEqual(new Date(2026, 8, 23, 9, 0, 0, 0))
   })
 
-  test('has no reminder left once 09:00 today has passed', () => {
-    expect(reminderTime('2026-09-22')).toBeNull()
+  test('honours the minutes of the given time', () => {
+    expect(reminderMoment('2026-09-23', '07:45')).toEqual(new Date(2026, 8, 23, 7, 45, 0, 0))
+  })
+
+  test('has no reminder left once that time has passed today', () => {
+    expect(reminderMoment('2026-09-22', '09:00')).toBeNull()
+  })
+
+  test('still has a reminder when that time is later today', () => {
+    expect(reminderMoment('2026-09-22', '18:15')).toEqual(new Date(2026, 8, 22, 18, 15, 0, 0))
+  })
+
+  /* The clock is frozen at 10:30:00.000, so 10:30 is exactly now: nothing left to schedule. */
+  test('has no reminder left at the exact minute', () => {
+    expect(reminderMoment('2026-09-22', '10:30')).toBeNull()
+    expect(reminderMoment('2026-09-22', '10:31')).toEqual(new Date(2026, 8, 22, 10, 31, 0, 0))
   })
 
   test('has no reminder left for a date that has gone by', () => {
-    expect(reminderTime('2026-09-19')).toBeNull()
+    expect(reminderMoment('2026-09-19', '23:59')).toBeNull()
   })
 
   test('shows the remaining days in green when the date is further out', () => {

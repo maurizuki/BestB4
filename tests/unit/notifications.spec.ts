@@ -3,10 +3,12 @@ import { flushPromises } from '@vue/test-utils'
 import { LocalNotifications } from '@capacitor/local-notifications'
 import {
   cancelExpiryNotification,
+  rescheduleReminders,
   scheduleExpiryNotification,
   syncNotifications
 } from '@/utils/notifications'
 import type { Item } from '@/composables/useItems'
+import { useReminderTime } from '@/composables/useReminderTime'
 import { reportError } from '@/utils/toast'
 
 /* jsdom has no window.Notification, so the plugin's own web implementation rejects every
@@ -31,6 +33,10 @@ const reported = vi.mocked(reportError)
 
 const NOT_ALLOWED = 'Notifications are not allowed, so no reminder will be shown.'
 
+/* The real setting, not a mock: it is a leaf with nothing to stub, and the point is that
+   notifications read whatever it currently holds. */
+const { setReminderTime } = useReminderTime()
+
 /* Only Date is faked, so setImmediate stays real and flushPromises() actually resolves. */
 const settle = () => flushPromises()
 
@@ -43,9 +49,12 @@ const anItem = (overrides: Partial<Item> = {}): Item => ({
 })
 
 describe('notifications', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.useFakeTimers({ toFake: ['Date'] })
     vi.setSystemTime(new Date(2026, 8, 22, 10, 30))
+    setReminderTime('09:00')
+    await settle()
+    localStorage.clear()
     vi.clearAllMocks()
   })
 
@@ -177,6 +186,106 @@ describe('notifications', () => {
       await settle()
 
       expect(requestPermissions).not.toHaveBeenCalled()
+    })
+  })
+
+  test('schedules at the reminder time chosen in the settings', async () => {
+    setReminderTime('07:45')
+
+    scheduleExpiryNotification(anItem())
+    await settle()
+
+    expect(schedule).toHaveBeenCalledWith({
+      notifications: [
+        expect.objectContaining({ schedule: { at: new Date(2026, 8, 29, 7, 45, 0, 0) } })
+      ]
+    })
+  })
+
+  describe('rescheduleReminders', () => {
+    test('moves every pending reminder to the new time', async () => {
+      setReminderTime('07:45')
+
+      rescheduleReminders([
+        anItem({ id: 1, expiresOn: '2026-09-29' }),
+        anItem({ id: 2, expiresOn: '2026-09-25' })
+      ])
+      await settle()
+
+      expect(schedule).toHaveBeenCalledOnce()
+      expect(schedule).toHaveBeenCalledWith({
+        notifications: [
+          expect.objectContaining({ id: 1, schedule: { at: new Date(2026, 8, 29, 7, 45, 0, 0) } }),
+          expect.objectContaining({ id: 2, schedule: { at: new Date(2026, 8, 25, 7, 45, 0, 0) } })
+        ]
+      })
+    })
+
+    /* 10:30 now: moved to 08:00, a reminder for today has nothing left to wait for. */
+    test('cancels a reminder whose new time has already passed today', async () => {
+      setReminderTime('08:00')
+
+      rescheduleReminders([
+        anItem({ id: 1, expiresOn: '2026-09-22' }),
+        anItem({ id: 2, expiresOn: '2026-09-29' })
+      ])
+      await settle()
+
+      expect(cancel).toHaveBeenCalledWith({ notifications: [{ id: 1 }] })
+      expect(schedule).toHaveBeenCalledWith({
+        notifications: [expect.objectContaining({ id: 2 })]
+      })
+    })
+
+    /* 10:30 now: at 09:00 today's reminder was gone, at 18:00 it is due again. */
+    test('schedules a reminder that becomes due again at a later time', async () => {
+      setReminderTime('18:00')
+
+      rescheduleReminders([anItem({ id: 1, expiresOn: '2026-09-22' })])
+      await settle()
+
+      expect(schedule).toHaveBeenCalledWith({
+        notifications: [
+          expect.objectContaining({ id: 1, schedule: { at: new Date(2026, 8, 22, 18, 0, 0, 0) } })
+        ]
+      })
+      expect(cancel).not.toHaveBeenCalled()
+    })
+
+    test('leaves undated items alone', async () => {
+      rescheduleReminders([anItem({ id: 1, expiresOn: null }), anItem({ id: 2 })])
+      await settle()
+
+      expect(schedule).toHaveBeenCalledWith({
+        notifications: [expect.objectContaining({ id: 2 })]
+      })
+      expect(cancel).not.toHaveBeenCalled()
+    })
+
+    test('checks the permission without asking for it', async () => {
+      rescheduleReminders([anItem()])
+      await settle()
+
+      expect(checkPermissions).toHaveBeenCalledOnce()
+      expect(requestPermissions).not.toHaveBeenCalled()
+    })
+
+    test('skips silently when the permission is not granted', async () => {
+      checkPermissions.mockResolvedValueOnce({ display: 'denied' })
+
+      rescheduleReminders([anItem()])
+      await settle()
+
+      expect(schedule).not.toHaveBeenCalled()
+      expect(cancel).not.toHaveBeenCalled()
+      expect(reported).not.toHaveBeenCalled()
+    })
+
+    test('does not reach the plugin when nothing is dated', async () => {
+      rescheduleReminders([anItem({ expiresOn: null })])
+      await settle()
+
+      expect(checkPermissions).not.toHaveBeenCalled()
     })
   })
 

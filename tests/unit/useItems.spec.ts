@@ -3,6 +3,7 @@ import { flushPromises } from '@vue/test-utils'
 import { useItems } from '@/composables/useItems'
 import {
   cancelExpiryNotification,
+  rescheduleReminders as rescheduleRemindersFor,
   scheduleExpiryNotification
 } from '@/utils/notifications'
 
@@ -12,8 +13,18 @@ vi.mock('@/utils/notifications')
 
 const scheduled = vi.mocked(scheduleExpiryNotification)
 const cancelled = vi.mocked(cancelExpiryNotification)
+const rescheduled = vi.mocked(rescheduleRemindersFor)
 
-const { items, sortedItems, addItem, getItem, updateItem, toggleExpiry, removeItem } = useItems()
+const {
+  items,
+  sortedItems,
+  addItem,
+  getItem,
+  updateItem,
+  toggleExpiry,
+  removeItem,
+  rescheduleReminders
+} = useItems()
 
 /* Only Date is faked, so setImmediate stays real and flushPromises() actually resolves. */
 const settle = () => flushPromises()
@@ -209,6 +220,18 @@ describe('useItems', () => {
       expect(scheduled).toHaveBeenCalledWith(
         expect.objectContaining({ expiresOn: '2026-09-29' })
       )
+    })
+
+    test('hands the whole list over when the reminder time changes', () => {
+      addItem('Milk', 7)
+      addItem('Bread', 3)
+
+      rescheduleReminders()
+
+      expect(rescheduled).toHaveBeenCalledWith([
+        expect.objectContaining({ description: 'Milk' }),
+        expect.objectContaining({ description: 'Bread' })
+      ])
     })
 
     test('touches no reminder when an undated item is renamed', () => {

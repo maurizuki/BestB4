@@ -2,6 +2,7 @@ import { createApp } from 'vue'
 import App from './App.vue'
 import router from './router';
 import { loadItems } from './composables/useItems';
+import { loadReminderTime } from './composables/useReminderTime';
 import { loadTheme } from './composables/useTheme';
 
 import { IonicVue } from '@ionic/vue';
@@ -42,7 +43,9 @@ const app = createApp(App)
   .use(router);
 
 /* ItemEditPage looks its item up synchronously at setup, so the list has to be hydrated
-   before anything mounts; the theme too, so the first frame is not in the wrong scheme. */
-Promise.all([router.isReady(), loadItems(), loadTheme()]).then(() => {
+   before anything mounts; the theme too, so the first frame is not in the wrong scheme.
+   The reminder time goes before the items: loading them re-arms the reminders, which reads
+   it - run in parallel, they would be re-armed at the default time. */
+Promise.all([router.isReady(), loadReminderTime().then(loadItems), loadTheme()]).then(() => {
   app.mount('#app');
 });
