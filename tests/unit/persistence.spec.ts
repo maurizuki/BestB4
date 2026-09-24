@@ -80,6 +80,18 @@ describe('item persistence', () => {
     expect(items.map((item) => item.expiresOn)).toEqual(['2026-09-29', null])
   })
 
+  test('sorts the restored list on startup', async () => {
+    const before = await restart()
+    before.addItem('Bread', 3)
+    const milk = before.addItem('Milk', 7)
+    before.toggleExpiry(milk.id)
+    await settle()
+
+    const { sortedItems } = await restart()
+
+    expect(sortedItems.value.map((item) => item.description)).toEqual(['Milk', 'Bread'])
+  })
+
   test('does not hand a restored id to a new item', async () => {
     const before = await restart()
     const milk = before.addItem('Milk', 7)

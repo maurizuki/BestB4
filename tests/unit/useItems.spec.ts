@@ -141,22 +141,76 @@ describe('useItems', () => {
     expect(items).toHaveLength(1)
   })
 
-  test('orders by expiration, then description, with undated items last', () => {
-    const bread = addItem('Bread', 3)
-    const yoghurt = addItem('Yoghurt', 3)
-    const milk = addItem('Milk', 1)
-    addItem('Rice', 30)
-    addItem('Flour', 30)
+  describe('display order', () => {
+    const order = () => sortedItems.value.map((item) => item.description)
 
-    ;[bread, yoghurt, milk].forEach((item) => toggleExpiry(item.id))
+    test('orders by expiration, then description, with undated items last', () => {
+      const bread = addItem('Bread', 3)
+      const yoghurt = addItem('Yoghurt', 3)
+      const milk = addItem('Milk', 1)
+      ;[bread, yoghurt, milk].forEach((item) => toggleExpiry(item.id))
+      addItem('Rice', 30)
+      addItem('Flour', 30)
 
-    expect(sortedItems.value.map((item) => item.description)).toEqual([
-      'Milk',
-      'Bread',
-      'Yoghurt',
-      'Flour',
-      'Rice'
-    ])
+      expect(order()).toEqual(['Milk', 'Bread', 'Yoghurt', 'Flour', 'Rice'])
+    })
+
+    test('re-sorts when an item is added', () => {
+      addItem('Milk', 7)
+      addItem('Bread', 3)
+
+      expect(order()).toEqual(['Bread', 'Milk'])
+    })
+
+    test('leaves an item in place when its expiration is set', () => {
+      addItem('Bread', 3)
+      const milk = addItem('Milk', 7)
+
+      toggleExpiry(milk.id)
+
+      expect(order()).toEqual(['Bread', 'Milk'])
+      expect(sortedItems.value[1].expiresOn).toBe('2026-09-29')
+    })
+
+    test('leaves an item in place when its expiration is cleared', () => {
+      const milk = addItem('Milk', 7)
+      toggleExpiry(milk.id)
+      addItem('Bread', 3)
+
+      toggleExpiry(milk.id)
+
+      expect(order()).toEqual(['Milk', 'Bread'])
+    })
+
+    test('re-sorts when an item is edited', () => {
+      addItem('Bread', 3)
+      const milk = addItem('Milk', 7)
+      toggleExpiry(milk.id)
+
+      updateItem(milk.id, 'Milk', 7)
+
+      expect(order()).toEqual(['Milk', 'Bread'])
+    })
+
+    test('re-sorts by the new description when an item is renamed', () => {
+      const bread = addItem('Bread', 3)
+      addItem('Milk', 7)
+
+      updateItem(bread.id, 'Water', 3)
+
+      expect(order()).toEqual(['Milk', 'Water'])
+    })
+
+    test('keeps the order of the others when an item is removed', () => {
+      addItem('Bread', 3)
+      const milk = addItem('Milk', 7)
+      const rice = addItem('Rice', 30)
+      toggleExpiry(milk.id)
+
+      removeItem(rice.id)
+
+      expect(order()).toEqual(['Bread', 'Milk'])
+    })
   })
 
   describe('reminders', () => {

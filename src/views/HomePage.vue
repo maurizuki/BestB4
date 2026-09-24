@@ -111,8 +111,7 @@ const editItem = (id: number) => router.push(`/item/${id}`);
 
 const openSettings = () => router.push('/settings');
 
-/* Neither tapping an option nor a start-side full swipe closes the row, so close it here.
-   close() is synchronous, so it always runs before the list re-sorts and moves this row. */
+/* Neither tapping an option nor a start-side full swipe closes the row, so close it here. */
 const toggleExpiryAndClose = (event: Event, id: number): void => {
   void (event.currentTarget as Element).closest('ion-item-sliding')?.close();
   toggleExpiry(id);

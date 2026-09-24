@@ -1,4 +1,4 @@
-import { computed, reactive, readonly } from 'vue';
+import { computed, reactive, readonly, ref } from 'vue';
 import { Preferences } from '@capacitor/preferences';
 import { addDays, today } from '@/utils/expiry';
 import {
@@ -58,6 +58,7 @@ export const loadItems = async (): Promise<void> => {
     reportError('Your saved items could not be loaded.', error);
   }
 
+  resort();
   syncNotifications(items);
 };
 
@@ -75,7 +76,21 @@ const byExpiryThenDescription = (a: Item, b: Item): number => {
   return a.description.localeCompare(b.description);
 };
 
-const sortedItems = computed(() => [...items].sort(byExpiryThenDescription));
+/* The display order, as ids. Deliberately not a live sort: it is only recomputed on load, add
+   and edit, so a row does not jump out from under the user's finger when they swipe its date
+   on or off, or delete a neighbour. */
+const order = ref<number[]>([]);
+
+const resort = (): void => {
+  order.value = [...items].sort(byExpiryThenDescription).map((item) => item.id);
+};
+
+/* Maps the frozen order onto the live items, so a toggled row shows its new chip in place and
+   a removed one simply drops out. */
+const sortedItems = computed(() => {
+  const byId = new Map(items.map((item) => [item.id, item]));
+  return order.value.flatMap((id) => byId.get(id) ?? []);
+});
 
 export function useItems() {
   const addItem = (description: string, durationDays: number): Item => {
@@ -86,6 +101,7 @@ export function useItems() {
       expiresOn: null
     };
     items.push(item);
+    resort();
     save();
     return item;
   };
@@ -99,6 +115,7 @@ export function useItems() {
     }
     item.description = description.trim();
     item.durationDays = durationDays;
+    resort();
     save();
     /* Scheduling under an id that is already pending replaces it, so this is how a renamed
        item gets new notification text. The new duration deliberately does not move a date

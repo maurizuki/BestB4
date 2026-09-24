@@ -87,13 +87,31 @@ describe('HomePage.vue', () => {
   test('renders dated items first, in expiration order', async () => {
     const rice = addItem('Rice', 30)
     const milk = addItem('Milk', 0)
+    ;[rice, milk].forEach((item) => toggleExpiry(item.id))
     addItem('Bread', 1)
 
-    ;[rice, milk].forEach((item) => toggleExpiry(item.id))
     const wrapper = await mountHomePage()
 
     const rows = wrapper.findAllComponents(IonItem)
     expect(rows.map((row) => row.text())).toEqual(['Milktoday', 'Rice30', 'Bread'])
+  })
+
+  test('keeps a row in place when its expiration is set', async () => {
+    addItem('Bread', 1)
+    addItem('Milk', 3)
+
+    const wrapper = await mountHomePage()
+    wrapper.findAll('ion-item-sliding').forEach((row) => {
+      row.element.close = vi.fn(() => Promise.resolve())
+    })
+
+    const milkStartOptions = wrapper
+      .findAllComponents(IonItemOptions)
+      .filter((options) => options.props('side') === 'start')[1]
+    await milkStartOptions.findComponent(IonItemOption).trigger('click')
+
+    const rows = wrapper.findAllComponents(IonItem)
+    expect(rows.map((row) => row.text())).toEqual(['Bread', 'Milk3'])
   })
 
   test('offers a bell to start the countdown and a crossed-out bell to clear it', async () => {
