@@ -1,3 +1,20 @@
+<!--
+  Copyright (C) 2026+ Maurizio Basaglia
+
+  This program is free software: you can redistribute it and/or modify
+  it under the terms of the GNU General Public License as published by
+  the Free Software Foundation, either version 3 of the License, or
+  (at your option) any later version.
+
+  This program is distributed in the hope that it will be useful,
+  but WITHOUT ANY WARRANTY; without even the implied warranty of
+  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+  GNU General Public License for more details.
+
+  You should have received a copy of the GNU General Public License
+  along with this program.  If not, see <https://gnu.org>.
+-->
+
 <template>
   <ion-page>
     <ion-header :translucent="true">
@@ -5,7 +22,6 @@
         <ion-buttons slot="start">
           <ion-button @click="cancel">Cancel</ion-button>
         </ion-buttons>
-        <ion-title>{{ isNew ? 'New' : 'Edit' }}</ion-title>
         <ion-buttons slot="end">
           <ion-button :strong="true" :disabled="!canSave" @click="confirm">OK</ion-button>
         </ion-buttons>
@@ -52,7 +68,6 @@ import {
   IonItem,
   IonList,
   IonPage,
-  IonTitle,
   IonToolbar,
   useIonRouter
 } from '@ionic/vue';
