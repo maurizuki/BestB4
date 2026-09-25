@@ -35,9 +35,18 @@
             <ion-icon slot="start" :icon="settings" />
             <ion-label>Settings</ion-label>
           </ion-item>
+          <ion-item button :detail="false" @click="aboutOpen = true">
+            <ion-icon slot="start" :icon="informationCircle" />
+            <ion-label>About</ion-label>
+          </ion-item>
         </ion-list>
       </ion-content>
     </ion-popover>
+
+    <!-- Driven by state, not a trigger: the menu item lives in the popover, which unmounts it. -->
+    <ion-modal :is-open="aboutOpen" @didDismiss="aboutOpen = false">
+      <about-modal @close="aboutOpen = false" />
+    </ion-modal>
 
     <ion-content :fullscreen="true">
       <ion-header collapse="condense">
@@ -102,6 +111,7 @@ import {
   IonItemSliding,
   IonLabel,
   IonList,
+  IonModal,
   IonPage,
   IonPopover,
   IonTitle,
@@ -110,12 +120,15 @@ import {
 import {
   add,
   ellipsisVertical,
+  informationCircle,
   notifications,
   notificationsOff,
   settings,
   trash
 } from 'ionicons/icons';
+import { ref } from 'vue';
 import { useRouter } from 'vue-router';
+import AboutModal from '@/components/AboutModal.vue';
 import { useItems } from '@/composables/useItems';
 import { expiryChip } from '@/utils/expiry';
 
@@ -127,6 +140,8 @@ const newItem = () => router.push('/item/new');
 const editItem = (id: number) => router.push(`/item/${id}`);
 
 const openSettings = () => router.push('/settings');
+
+const aboutOpen = ref(false);
 
 /* Neither tapping an option nor a start-side full swipe closes the row, so close it here. */
 const toggleExpiryAndClose = (event: Event, id: number): void => {

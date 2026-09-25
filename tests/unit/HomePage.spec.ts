@@ -6,6 +6,7 @@ import {
   IonItem,
   IonItemOption,
   IonItemOptions,
+  IonModal,
   IonPopover
 } from '@ionic/vue'
 import { createRouter, createWebHistory } from '@ionic/vue-router'
@@ -18,6 +19,9 @@ import { scheduleExpiryNotification } from '@/utils/notifications'
 /* jsdom has no window.Notification, so the real plugin would reject on every store
    mutation; the reminder payload itself is covered in notifications.spec.ts. */
 vi.mock('@/utils/notifications')
+
+/* The about modal reads the app version through it; a factory, as the plugin is a proxy. */
+vi.mock('@capacitor/app', () => ({ App: { getInfo: vi.fn(() => Promise.resolve({ version: '0.3' })) } }))
 
 const scheduled = vi.mocked(scheduleExpiryNotification)
 
@@ -177,6 +181,30 @@ describe('HomePage.vue', () => {
 
     expect(push).toHaveBeenCalledWith('/settings')
     push.mockRestore()
+    wrapper.unmount()
+  })
+
+  test('offers About in the menu, and choosing it opens the about modal', async () => {
+    await router.push('/home')
+    await router.isReady()
+    /* Attached for the same reason as the Settings test above. */
+    const wrapper = mount(HomePage, {
+      global: { plugins: [IonicVue, router] },
+      attachTo: document.body
+    })
+    expect(wrapper.findComponent(IonModal).props('isOpen')).toBe(false)
+
+    await wrapper.find('#home-menu').trigger('click')
+    await vi.waitFor(() => {
+      expect(wrapper.findComponent(IonPopover).text()).toContain('About')
+    })
+    const aboutEntry = wrapper
+      .findComponent(IonPopover)
+      .findAllComponents(IonItem)
+      .find((item) => item.text() === 'About')
+    await aboutEntry?.trigger('click')
+
+    expect(wrapper.findComponent(IonModal).props('isOpen')).toBe(true)
     wrapper.unmount()
   })
 
