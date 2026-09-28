@@ -23,6 +23,7 @@ const {
   updateItem,
   toggleExpiry,
   removeItem,
+  restoreItem,
   rescheduleReminders
 } = useItems()
 
@@ -141,6 +142,33 @@ describe('useItems', () => {
     expect(items).toHaveLength(1)
   })
 
+  test('hands back the item it removed', () => {
+    const milk = addItem('Milk', 7)
+
+    expect(removeItem(milk.id)).toMatchObject({ id: milk.id, description: 'Milk' })
+    expect(removeItem(milk.id)).toBeUndefined()
+  })
+
+  test('restores a removed item under its original id', () => {
+    const milk = addItem('Milk', 7)
+    addItem('Bread', 3)
+
+    restoreItem(removeItem(milk.id)!)
+
+    expect(getItem(milk.id)).toMatchObject({ description: 'Milk', durationDays: 7 })
+    expect(items).toHaveLength(2)
+  })
+
+  test('ignores a restore of an item that is still in the list', () => {
+    const milk = addItem('Milk', 7)
+    const removed = removeItem(milk.id)!
+
+    restoreItem(removed)
+    restoreItem(removed)
+
+    expect(items).toHaveLength(1)
+  })
+
   describe('display order', () => {
     const order = () => sortedItems.value.map((item) => item.description)
 
@@ -211,6 +239,28 @@ describe('useItems', () => {
 
       expect(order()).toEqual(['Bread', 'Milk'])
     })
+
+    test('puts a restored item back where it was, without moving the others', () => {
+      addItem('Bread', 3)
+      const milk = addItem('Milk', 7)
+      addItem('Rice', 30)
+      toggleExpiry(milk.id)
+
+      restoreItem(removeItem(milk.id)!)
+
+      expect(order()).toEqual(['Bread', 'Milk', 'Rice'])
+    })
+
+    test('sorts a restored item into place when the list was re-sorted meanwhile', () => {
+      const milk = addItem('Milk', 7)
+      const removed = removeItem(milk.id)!
+      addItem('Rice', 30)
+      addItem('Bread', 3)
+
+      restoreItem(removed)
+
+      expect(order()).toEqual(['Bread', 'Milk', 'Rice'])
+    })
   })
 
   describe('reminders', () => {
@@ -250,6 +300,28 @@ describe('useItems', () => {
       removeItem(milk.id)
 
       expect(cancelled).not.toHaveBeenCalled()
+    })
+
+    test('schedules it again when a dated item is restored', () => {
+      const milk = addItem('Milk', 7)
+      toggleExpiry(milk.id)
+      const removed = removeItem(milk.id)!
+      vi.clearAllMocks()
+
+      restoreItem(removed)
+
+      expect(scheduled).toHaveBeenCalledWith(
+        expect.objectContaining({ id: milk.id, expiresOn: '2026-09-29' })
+      )
+    })
+
+    test('schedules nothing when an undated item is restored', () => {
+      const milk = addItem('Milk', 7)
+      const removed = removeItem(milk.id)!
+
+      restoreItem(removed)
+
+      expect(scheduled).not.toHaveBeenCalled()
     })
 
     test('reschedules with the new text when a dated item is renamed', () => {

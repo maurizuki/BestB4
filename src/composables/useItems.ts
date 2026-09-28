@@ -157,15 +157,34 @@ export function useItems() {
     }
   };
 
-  const removeItem = (id: number): void => {
+  /* Hands the removed item back, so the caller can offer to restore it. */
+  const removeItem = (id: number): Item | undefined => {
     const index = items.findIndex((item) => item.id === id);
     if (index === -1) {
-      return;
+      return undefined;
     }
     const [removed] = items.splice(index, 1);
     save();
     if (removed.expiresOn !== null) {
       cancelExpiryNotification(removed);
+    }
+    return removed;
+  };
+
+  /* Undoes a removal. The id is reused as is: ids only ever grow, so nothing can have taken it. */
+  const restoreItem = (item: Item): void => {
+    if (getItem(item.id)) {
+      return;
+    }
+    items.push(item);
+    /* Removal leaves the id in the frozen order, so the row normally comes back exactly where
+       it was; only if the list was re-sorted since does it need a place of its own. */
+    if (!order.value.includes(item.id)) {
+      resort();
+    }
+    save();
+    if (item.expiresOn !== null) {
+      scheduleExpiryNotification(item);
     }
   };
 
@@ -180,6 +199,7 @@ export function useItems() {
     updateItem,
     toggleExpiry,
     removeItem,
+    restoreItem,
     rescheduleReminders
   };
 }

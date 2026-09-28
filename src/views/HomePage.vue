@@ -78,8 +78,8 @@
             </ion-chip>
           </ion-item>
 
-          <ion-item-options side="end" @ionSwipe="removeItem(item.id)">
-            <ion-item-option color="danger" expandable @click="removeItem(item.id)">
+          <ion-item-options side="end" @ionSwipe="deleteItem(item.id)">
+            <ion-item-option color="danger" expandable @click="deleteItem(item.id)">
               <ion-icon slot="icon-only" :icon="trash" />
             </ion-item-option>
           </ion-item-options>
@@ -131,9 +131,10 @@ import { useRouter } from 'vue-router';
 import AboutModal from '@/components/AboutModal.vue';
 import { useItems } from '@/composables/useItems';
 import { expiryChip } from '@/utils/expiry';
+import { offerUndo } from '@/utils/toast';
 
 const router = useRouter();
-const { sortedItems, toggleExpiry, removeItem } = useItems();
+const { sortedItems, toggleExpiry, removeItem, restoreItem } = useItems();
 
 const newItem = () => router.push('/item/new');
 
@@ -147,6 +148,15 @@ const aboutOpen = ref(false);
 const toggleExpiryAndClose = (event: Event, id: number): void => {
   void (event.currentTarget as Element).closest('ion-item-sliding')?.close();
   toggleExpiry(id);
+};
+
+/* A full swipe fires both the swipe and the click; only the first finds anything to remove,
+   so only one toast is offered. */
+const deleteItem = (id: number): void => {
+  const removed = removeItem(id);
+  if (removed) {
+    offerUndo(`"${removed.description}" deleted.`, () => restoreItem(removed));
+  }
 };
 </script>
 

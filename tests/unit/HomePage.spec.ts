@@ -15,15 +15,21 @@ import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import HomePage from '@/views/HomePage.vue'
 import { useItems } from '@/composables/useItems'
 import { scheduleExpiryNotification } from '@/utils/notifications'
+import { offerUndo } from '@/utils/toast'
 
 /* jsdom has no window.Notification, so the real plugin would reject on every store
    mutation; the reminder payload itself is covered in notifications.spec.ts. */
 vi.mock('@/utils/notifications')
 
+/* jsdom has no Element.animate, so a real toast may never finish presenting; its buttons
+   are covered in toast.spec.ts. */
+vi.mock('@/utils/toast')
+
 /* The about modal reads the app version through it; a factory, as the plugin is a proxy. */
 vi.mock('@capacitor/app', () => ({ App: { getInfo: vi.fn(() => Promise.resolve({ version: '0.3' })) } }))
 
 const scheduled = vi.mocked(scheduleExpiryNotification)
+const offered = vi.mocked(offerUndo)
 
 const { items, addItem, toggleExpiry, removeItem } = useItems()
 
@@ -148,6 +154,55 @@ describe('HomePage.vue', () => {
     expect(chips).toHaveLength(1)
     expect(chips[0].text()).toBe('3')
     expect(close).toHaveBeenCalledOnce()
+  })
+
+  const tapDelete = async (wrapper: Awaited<ReturnType<typeof mountHomePage>>, row: number) => {
+    const endOptions = wrapper
+      .findAllComponents(IonItemOptions)
+      .filter((options) => options.props('side') === 'end')[row]
+    await endOptions.findComponent(IonItemOption).trigger('click')
+  }
+
+  test('deletes the row and offers to undo it when the end option is tapped', async () => {
+    addItem('Bread', 1)
+    addItem('Milk', 3)
+
+    const wrapper = await mountHomePage()
+    await tapDelete(wrapper, 1)
+
+    const rows = wrapper.findAllComponents(IonItem)
+    expect(rows.map((row) => row.text())).toEqual(['Bread'])
+    expect(offered).toHaveBeenCalledOnce()
+    expect(offered).toHaveBeenCalledWith('"Milk" deleted.', expect.any(Function))
+  })
+
+  test('offers the undo only once when a full swipe also counts as a tap', async () => {
+    addItem('Milk', 3)
+
+    const wrapper = await mountHomePage()
+    const [endOptions] = wrapper
+      .findAllComponents(IonItemOptions)
+      .filter((options) => options.props('side') === 'end')
+    await endOptions.trigger('ionSwipe')
+    expect(offered).toHaveBeenCalledOnce()
+    await endOptions.findComponent(IonItemOption).trigger('click')
+
+    expect(offered).toHaveBeenCalledOnce()
+  })
+
+  test('puts a deleted row back in place when the deletion is undone', async () => {
+    addItem('Bread', 1)
+    addItem('Milk', 3)
+    addItem('Rice', 30)
+
+    const wrapper = await mountHomePage()
+    await tapDelete(wrapper, 1)
+    const [, undo] = offered.mock.calls[0]
+    undo()
+    await wrapper.vm.$nextTick()
+
+    const rows = wrapper.findAllComponents(IonItem)
+    expect(rows.map((row) => row.text())).toEqual(['Bread', 'Milk', 'Rice'])
   })
 
   test('has a menu button that opens the menu', async () => {

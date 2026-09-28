@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { flushPromises } from '@vue/test-utils'
-import { toastController } from '@ionic/vue'
-import { reportError } from '@/utils/toast'
+import { toastController, type ToastButton } from '@ionic/vue'
+import { close } from 'ionicons/icons'
+import { offerUndo, reportError } from '@/utils/toast'
 
 /* jsdom has no Element.animate, so a real Ionic toast may never finish presenting; what
    matters here is what gets handed to the controller. */
@@ -84,6 +85,61 @@ describe('reportError', () => {
     expect(() => reportError('Your changes could not be saved.')).not.toThrow()
     await settle()
 
-    expect(logged).toHaveBeenCalledWith('The error toast could not be shown.', expect.any(Error))
+    expect(logged).toHaveBeenCalledWith('The toast could not be shown.', expect.any(Error))
+  })
+})
+
+describe('offerUndo', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  const buttons = () => create.mock.calls[0][0]?.buttons as ToastButton[]
+
+  test('shows the message at the bottom, closing by itself after a while', async () => {
+    offerUndo('"Milk" deleted.', () => undefined)
+    await settle()
+
+    expect(create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: '"Milk" deleted.',
+        position: 'bottom',
+        duration: expect.any(Number)
+      })
+    )
+    expect(create.mock.calls[0][0]).not.toHaveProperty('color', 'danger')
+  })
+
+  test('offers an Undo button that takes the action back', async () => {
+    const undo = vi.fn()
+
+    offerUndo('"Milk" deleted.', undo)
+    await settle()
+    const undoButton = buttons().find((button) => button.text === 'Undo')
+    await undoButton?.handler?.()
+
+    expect(undo).toHaveBeenCalledOnce()
+  })
+
+  test('offers a button that just dismisses the toast', async () => {
+    offerUndo('"Milk" deleted.', () => undefined)
+    await settle()
+
+    expect(buttons()).toContainEqual(
+      expect.objectContaining({
+        icon: close,
+        role: 'cancel',
+        htmlAttributes: { 'aria-label': 'Dismiss' }
+      })
+    )
+  })
+
+  test('dismisses the toast already showing before presenting a new one', async () => {
+    const dismiss = vi.fn(async () => true)
+    getTop.mockResolvedValueOnce({ dismiss } as unknown as HTMLIonToastElement)
+
+    offerUndo('"Milk" deleted.', () => undefined)
+    await settle()
+
+    expect(dismiss).toHaveBeenCalledOnce()
+    expect(dismiss.mock.invocationCallOrder[0]).toBeLessThan(create.mock.invocationCallOrder[0])
   })
 })

@@ -143,6 +143,18 @@ describe('item persistence', () => {
     expect(await stored()).toEqual([expect.objectContaining({ description: 'Bread' })])
   })
 
+  test('saves the list when a removed item is restored', async () => {
+    const { addItem, removeItem, restoreItem } = await restart()
+    const milk = addItem('Milk', 7)
+    const removed = removeItem(milk.id)
+    await settle()
+
+    restoreItem(removed!)
+    await settle()
+
+    expect(await stored()).toEqual([expect.objectContaining({ id: milk.id, description: 'Milk' })])
+  })
+
   test('saves the list when the expiration is toggled', async () => {
     const { addItem, toggleExpiry } = await restart()
     const milk = addItem('Milk', 7)
