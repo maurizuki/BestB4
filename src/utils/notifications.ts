@@ -18,12 +18,22 @@
 import { LocalNotifications, type LocalNotificationSchema } from '@capacitor/local-notifications';
 import type { Item } from '@/composables/useItems';
 import { useReminderTime } from '@/composables/useReminderTime';
-import { reminderMoment } from '@/utils/expiry';
+import { addDays, reminderMoment } from '@/utils/expiry';
 import { reportError } from '@/utils/toast';
 
 const { reminderTime } = useReminderTime();
 
-const REMINDER_BODY = 'Best before today.';
+const DAY_BEFORE_BODY = 'Best before tomorrow.';
+
+const EXPIRY_DAY_BODY = 'Best before today.';
+
+/* The expiration-day reminder keeps the item id, so reminders pending from before the day-before
+   one existed stay valid. The offset keeps both ids distinct and within Android's 32-bit int. */
+const DAY_BEFORE_ID_OFFSET = 1_000_000_000;
+
+const dayBeforeId = (item: Item): number => item.id + DAY_BEFORE_ID_OFFSET;
+
+const reminderIds = (item: Item): number[] => [item.id, dayBeforeId(item)];
 
 const NOT_ALLOWED = 'Notifications are not allowed, so no reminder will be shown.';
 
@@ -39,10 +49,15 @@ const attempt = async (action: () => Promise<unknown>): Promise<void> => {
   }
 };
 
-/* Null whenever there is nothing to schedule: no date set, or the reminder time on that day
-   already gone by. The time is read on every call, so a change applies to the next one. */
-const toNotification = (item: Item): LocalNotificationSchema | null => {
-  const at = item.expiresOn === null ? null : reminderMoment(item.expiresOn, reminderTime.value);
+/* Null once the reminder time on that day has gone by. The time is read on every call, so a
+   change applies to the next one. */
+const toNotification = (
+  id: number,
+  item: Item,
+  isoDate: string,
+  body: string
+): LocalNotificationSchema | null => {
+  const at = reminderMoment(isoDate, reminderTime.value);
   if (at === null) {
     return null;
   }
@@ -51,9 +66,9 @@ const toNotification = (item: Item): LocalNotificationSchema | null => {
      send the user to Android's "Alarms & reminders" settings, and revoking that permission
      deletes every scheduled notification. */
   return {
-    id: item.id,
+    id,
     title: item.description,
-    body: REMINDER_BODY,
+    body,
     schedule: { at },
     isExactNotification: false
   };
@@ -63,9 +78,21 @@ const isNotification = (
   notification: LocalNotificationSchema | null
 ): notification is LocalNotificationSchema => notification !== null;
 
+/* The reminders of an item still ahead, the day before first. Empty when no date is set. */
+const toNotifications = (item: Item): LocalNotificationSchema[] => {
+  if (item.expiresOn === null) {
+    return [];
+  }
+
+  return [
+    toNotification(dayBeforeId(item), item, addDays(item.expiresOn, -1), DAY_BEFORE_BODY),
+    toNotification(item.id, item, item.expiresOn, EXPIRY_DAY_BODY)
+  ].filter(isNotification);
+};
+
 export const scheduleExpiryNotification = (item: Item): void => {
-  const notification = toNotification(item);
-  if (notification === null) {
+  const notifications = toNotifications(item);
+  if (notifications.length === 0) {
     return;
   }
 
@@ -77,12 +104,14 @@ export const scheduleExpiryNotification = (item: Item): void => {
       reportError(NOT_ALLOWED);
       return;
     }
-    await LocalNotifications.schedule({ notifications: [notification] });
+    await LocalNotifications.schedule({ notifications });
   });
 };
 
 export const cancelExpiryNotification = (item: Item): void => {
-  void attempt(() => LocalNotifications.cancel({ notifications: [{ id: item.id }] }));
+  void attempt(() =>
+    LocalNotifications.cancel({ notifications: reminderIds(item).map((id) => ({ id })) })
+  );
 };
 
 /* Pending notifications do not survive everything the list survives: the web implementation
@@ -90,7 +119,7 @@ export const cancelExpiryNotification = (item: Item): void => {
    oldest past 64. The stored list is the source of truth, so it is re-applied at startup.
    Scheduling an id that is already pending replaces it, so this is idempotent. */
 export const syncNotifications = (items: readonly Item[]): void => {
-  const notifications = items.map(toNotification).filter(isNotification);
+  const notifications = items.flatMap(toNotifications);
 
   if (notifications.length === 0) {
     return;
@@ -122,10 +151,11 @@ export const rescheduleReminders = (items: readonly Item[]): void => {
       return;
     }
 
-    const due = dated.map(toNotification).filter(isNotification);
-    const stale = dated.filter((item) => toNotification(item) === null);
+    const due = dated.flatMap(toNotifications);
+    const dueIds = new Set(due.map(({ id }) => id));
+    const stale = dated.flatMap(reminderIds).filter((id) => !dueIds.has(id));
     if (stale.length > 0) {
-      await LocalNotifications.cancel({ notifications: stale.map(({ id }) => ({ id })) });
+      await LocalNotifications.cancel({ notifications: stale.map((id) => ({ id })) });
     }
     if (due.length > 0) {
       await LocalNotifications.schedule({ notifications: due });

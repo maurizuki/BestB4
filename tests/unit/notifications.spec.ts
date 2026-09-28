@@ -33,6 +33,8 @@ const reported = vi.mocked(reportError)
 
 const NOT_ALLOWED = 'Notifications are not allowed, so no reminder will be shown.'
 
+const dayBefore = (id: number) => 1_000_000_000 + id
+
 /* The real setting, not a mock: it is a leaf with nothing to stub, and the point is that
    notifications read whatever it currently holds. */
 const { setReminderTime } = useReminderTime()
@@ -63,12 +65,19 @@ describe('notifications', () => {
     vi.useRealTimers()
   })
 
-  test('schedules at 09:00 on the expiration date', async () => {
+  test('schedules at 09:00 on the day before and on the expiration date', async () => {
     scheduleExpiryNotification(anItem())
     await settle()
 
     expect(schedule).toHaveBeenCalledWith({
       notifications: [
+        {
+          id: dayBefore(42),
+          title: 'Milk',
+          body: 'Best before tomorrow.',
+          schedule: { at: new Date(2026, 8, 28, 9, 0, 0, 0) },
+          isExactNotification: false
+        },
         {
           id: 42,
           title: 'Milk',
@@ -85,7 +94,38 @@ describe('notifications', () => {
     await settle()
 
     expect(schedule).toHaveBeenCalledWith({
-      notifications: [expect.objectContaining({ title: 'Semi-skimmed milk' })]
+      notifications: [
+        expect.objectContaining({ title: 'Semi-skimmed milk' }),
+        expect.objectContaining({ title: 'Semi-skimmed milk' })
+      ]
+    })
+  })
+
+  test('schedules only the expiration date when 09:00 the day before has passed', async () => {
+    scheduleExpiryNotification(anItem({ expiresOn: '2026-09-23' }))
+    await settle()
+
+    expect(schedule).toHaveBeenCalledWith({
+      notifications: [
+        expect.objectContaining({ id: 42, schedule: { at: new Date(2026, 8, 23, 9, 0, 0, 0) } })
+      ]
+    })
+  })
+
+  test('schedules the day before for later today when 09:00 has not arrived yet', async () => {
+    vi.setSystemTime(new Date(2026, 8, 22, 8, 59))
+
+    scheduleExpiryNotification(anItem({ expiresOn: '2026-09-23' }))
+    await settle()
+
+    expect(schedule).toHaveBeenCalledWith({
+      notifications: [
+        expect.objectContaining({
+          id: dayBefore(42),
+          schedule: { at: new Date(2026, 8, 22, 9, 0, 0, 0) }
+        }),
+        expect.objectContaining({ id: 42, schedule: { at: new Date(2026, 8, 23, 9, 0, 0, 0) } })
+      ]
     })
   })
 
@@ -132,11 +172,11 @@ describe('notifications', () => {
     expect(schedule).not.toHaveBeenCalled()
   })
 
-  test('cancels the notification of an item', async () => {
+  test('cancels both reminders of an item', async () => {
     cancelExpiryNotification(anItem())
     await settle()
 
-    expect(cancel).toHaveBeenCalledWith({ notifications: [{ id: 42 }] })
+    expect(cancel).toHaveBeenCalledWith({ notifications: [{ id: 42 }, { id: dayBefore(42) }] })
   })
 
   test('reports a failing plugin to the user without throwing', async () => {
@@ -197,6 +237,7 @@ describe('notifications', () => {
 
     expect(schedule).toHaveBeenCalledWith({
       notifications: [
+        expect.objectContaining({ schedule: { at: new Date(2026, 8, 28, 7, 45, 0, 0) } }),
         expect.objectContaining({ schedule: { at: new Date(2026, 8, 29, 7, 45, 0, 0) } })
       ]
     })
@@ -215,7 +256,15 @@ describe('notifications', () => {
       expect(schedule).toHaveBeenCalledOnce()
       expect(schedule).toHaveBeenCalledWith({
         notifications: [
+          expect.objectContaining({
+            id: dayBefore(1),
+            schedule: { at: new Date(2026, 8, 28, 7, 45, 0, 0) }
+          }),
           expect.objectContaining({ id: 1, schedule: { at: new Date(2026, 8, 29, 7, 45, 0, 0) } }),
+          expect.objectContaining({
+            id: dayBefore(2),
+            schedule: { at: new Date(2026, 8, 24, 7, 45, 0, 0) }
+          }),
           expect.objectContaining({ id: 2, schedule: { at: new Date(2026, 8, 25, 7, 45, 0, 0) } })
         ]
       })
@@ -231,9 +280,27 @@ describe('notifications', () => {
       ])
       await settle()
 
-      expect(cancel).toHaveBeenCalledWith({ notifications: [{ id: 1 }] })
+      expect(cancel).toHaveBeenCalledWith({ notifications: [{ id: 1 }, { id: dayBefore(1) }] })
       expect(schedule).toHaveBeenCalledWith({
-        notifications: [expect.objectContaining({ id: 2 })]
+        notifications: [
+          expect.objectContaining({ id: dayBefore(2) }),
+          expect.objectContaining({ id: 2 })
+        ]
+      })
+    })
+
+    /* 10:30 now: moved to 08:00, tomorrow's reminder moves but today's day-before one is gone. */
+    test('cancels only the day before when its new time has already passed', async () => {
+      setReminderTime('08:00')
+
+      rescheduleReminders([anItem({ id: 1, expiresOn: '2026-09-23' })])
+      await settle()
+
+      expect(cancel).toHaveBeenCalledWith({ notifications: [{ id: dayBefore(1) }] })
+      expect(schedule).toHaveBeenCalledWith({
+        notifications: [
+          expect.objectContaining({ id: 1, schedule: { at: new Date(2026, 8, 23, 8, 0, 0, 0) } })
+        ]
       })
     })
 
@@ -249,7 +316,7 @@ describe('notifications', () => {
           expect.objectContaining({ id: 1, schedule: { at: new Date(2026, 8, 22, 18, 0, 0, 0) } })
         ]
       })
-      expect(cancel).not.toHaveBeenCalled()
+      expect(cancel).toHaveBeenCalledWith({ notifications: [{ id: dayBefore(1) }] })
     })
 
     test('leaves undated items alone', async () => {
@@ -257,7 +324,10 @@ describe('notifications', () => {
       await settle()
 
       expect(schedule).toHaveBeenCalledWith({
-        notifications: [expect.objectContaining({ id: 2 })]
+        notifications: [
+          expect.objectContaining({ id: dayBefore(2) }),
+          expect.objectContaining({ id: 2 })
+        ]
       })
       expect(cancel).not.toHaveBeenCalled()
     })
@@ -300,6 +370,7 @@ describe('notifications', () => {
       expect(schedule).toHaveBeenCalledOnce()
       expect(schedule).toHaveBeenCalledWith({
         notifications: [
+          expect.objectContaining({ id: dayBefore(1), title: 'Milk' }),
           expect.objectContaining({ id: 1, title: 'Milk' }),
           expect.objectContaining({ id: 2, title: 'Bread' })
         ]
@@ -315,7 +386,10 @@ describe('notifications', () => {
       await settle()
 
       expect(schedule).toHaveBeenCalledWith({
-        notifications: [expect.objectContaining({ id: 3 })]
+        notifications: [
+          expect.objectContaining({ id: dayBefore(3) }),
+          expect.objectContaining({ id: 3 })
+        ]
       })
     })
 
