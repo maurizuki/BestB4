@@ -166,4 +166,9 @@ const deleteItem = (id: number): void => {
   color: var(--ion-color-medium);
   margin-top: 40%;
 }
+
+/* Ionic offsets a bottom fab by a fixed 10px, ignoring the edge-to-edge navigation bar. */
+ion-fab.fab-vertical-bottom {
+  bottom: calc(10px + var(--ion-safe-area-bottom, 0px));
+}
 </style>
