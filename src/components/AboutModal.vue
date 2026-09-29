@@ -28,9 +28,12 @@
     <h1>BestB4</h1>
     <p v-if="version" class="version">Version {{ version }}</p>
     <p>© 2026+ Maurizio Basaglia</p>
-    <a :href="LICENSE_URL" target="_blank" rel="noopener noreferrer">
-      GNU General Public License v3.0
-    </a>
+    <p>
+      <a :href="LICENSE_URL" target="_blank" rel="noopener noreferrer">
+        GNU General Public License v3.0
+      </a>
+    </p>
+    <ion-button href="https://github.com/maurizuki/BestB4/issues" target="_blank" rel="noopener noreferrer">Support and feedback</ion-button>
   </ion-content>
 </template>
 
