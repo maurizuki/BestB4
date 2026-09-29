@@ -2,6 +2,13 @@
 
 Have you ever had to throw away good food because you forgot its expiration date? This app can help you reduce waste.
 
+## Getting started
+
+Install the app on your Android device:
+1. Navigate to the [latest release page](https://github.com/maurizuki/BestB4/releases/latest) with your device.
+2. Download the ```.apk``` file.
+3. Install the downloaded file (you may need to grant permission to install an app outside the Play Store).
+
 ## How to use
 
 Tap ```+``` to add something and enter how many days it keeps. Swipe it right to start the countdown. BestB4 reminds you the day before it goes off and again on the day. Swipe right again to clear the expiration date, so it's ready for next time. Tap an item to edit it, swipe it left to delete it.
@@ -34,11 +41,12 @@ To clone and test this application locally, make sure you have [Node.js](https:/
    ionic serve
    ```
 
-4. **Build for Android:**
+4. **Build for Android (requires Gradle/Android Studio):**
    ```
    npm run build
-   ionic cap sync
-   ionic cap open android
+   npx cap sync
+   cd android
+   ./gradlew assembleRelease
    ```
 
 ## License and Open Source philosophy
