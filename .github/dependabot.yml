@@ -14,3 +14,7 @@ updates:
     directory: "/" # Location of package manifests
     schedule:
       interval: "weekly"
+    ignore:
+      # typescript-eslint only supports TypeScript below 6.1
+      - dependency-name: "typescript"
+        versions: [ ">=6.1.0" ]
