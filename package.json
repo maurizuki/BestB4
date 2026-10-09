@@ -19,7 +19,7 @@
     "@capacitor/local-notifications": "8.3.1",
     "@capacitor/preferences": "8.0.1",
     "@capacitor/status-bar": "8.0.3",
-    "@ionic/vue": "^9.0.5",
+    "@ionic/vue": "^9.0.6",
     "@ionic/vue-router": "^9.0.5",
     "ionicons": "^8.1.0",
     "vue": "^3.5.0",
