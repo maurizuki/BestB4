@@ -22,7 +22,7 @@
     "@ionic/vue": "^9.0.10",
     "@ionic/vue-router": "^9.0.11",
     "ionicons": "^8.1.0",
-    "vue": "^3.5.44",
+    "vue": "^3.5.45",
     "vue-router": "^5.4.0"
   },
   "devDependencies": {
